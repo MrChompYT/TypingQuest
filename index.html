@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Typing Quest</title>
+  <link rel="stylesheet" href="indexstyle.css" />
+</head>
+<body>
+
+<!-- 🚪 Welcome Screen -->
+<div class="container" id="welcomeScreen">
+  <h2>Welcome to Typing Quest 🦈</h2>
+  <button class="submit-button" onclick="showLogin()">Log In</button>
+  <button class="submit-button" onclick="showCreate()">Create Account</button>
+</div>
+
+<!-- 📝 Create Account -->
+<div class="container" id="accountSetup" style="display:none;">
+  <h2>Create Your Account</h2>
+  <div class="role-buttons">
+    <button onclick="selectRole('student')">I'm a Student 🐣</button>
+    <button onclick="selectRole('teacher')">I'm a Teacher 👩‍🏫</button>
+  </div>
+  <div class="input-group">
+    <label for="createUsername">Username</label>
+    <input type="text" id="createUsername" />
+  </div>
+  <button class="submit-button" onclick="submitForm()">Create</button>
+</div>
+
+<!-- 🔐 Log In -->
+<div class="container" id="loginScreen" style="display:none;">
+  <h2>Log In</h2>
+  <div class="input-group">
+    <label for="loginUsername">Username</label>
+    <input type="text" id="loginUsername" />
+  </div>
+  <button class="submit-button" onclick="login()">Log In</button>
+</div>
+
+<!-- 🐣 Student Dashboard -->
+<div class="dashboard" id="studentHome" style="display:none;">
+  <h2>Hello, <span id="studentNameDisplay"></span>!</h2>
+  <button class="logout-button" onclick="logout()">🚪 Log Out</button>
+
+  <div class="quest-buttons">
+    <button class="quest" onclick="startChallenge()">📘 Daily Challenge</button>
+    <button class="quest" onclick="startTypingQuest()">⌨️ Typing Quest</button>
+    <button class="quest" onclick="startStoryBuilder()">📖 Story Builder</button>
+    <button class="quest" onclick="startMiniGame()">🎮 Grammar Game</button>
+  </div>
+
+  <div class="xp-bar">
+    <label>XP Progress:</label>
+    <progress value="45" max="100"></progress>
+  </div>
+
+  <div id="gameContent"></div>
+  <div id="badgeUnlocked"></div>
+  <div class="badge-shelf">
+    <h3>My Badges</h3>
+    <ul id="badgeList"></ul>
+  </div>
+</div>
+
+<!-- ⌨️ Typing Quest -->
+<div class="dashboard" id="studentDashboard" style="display:none;">
+  <h2>Typing Quest</h2>
+  <div id="typingArea" contenteditable="true" oninput="trackTyping()"></div>
+  <div id="studentTimer">Typing Time: 0s</div>
+  <button class="submit-button" onclick="goHome()">🔙 Back to Dashboard</button>
+</div>
+
+<!-- 👩‍🏫 Teacher Dashboard -->
+<div class="dashboard" id="teacherDashboard" style="display:none;">
+  <h2>Classroom Control Center</h2>
+  <button class="logout-button" onclick="logout()">🚪 Log Out</button>
+  <div class="stats">
+    <p><strong>Total Typing Time:</strong> <span id="totalTime">0s</span></p>
+    <p><strong>Most Active Student:</strong> <span id="topStudent">N/A</span></p>
+  </div>
+  <ul id="studentList"></ul>
+</div>
+
+<!-- ⏰ Inactivity Popup -->
+<div id="popup" style="display:none;">
+  <p>⏰ Are you still there?</p>
+  <button onclick="dismissPopup()">Yes</button>
+</div>
+
+<script src="main.js"></script>
+</body>
+</html>
