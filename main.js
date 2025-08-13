@@ -1,58 +1,91 @@
+// SharkBite Sites — Sunday layout + new features (subjects, weekly goals, clock/AFK, search)
+
 let allUsers = JSON.parse(localStorage.getItem("allUsers")) || {};
 let currentUser = null;
 let currentRole = null;
-let subjectPath = null;
-let activityTimer;
+let activityTimer = null;
+
+/*
+User shape:
+{
+  username, role: 'Student'|'Teacher',
+  badges: [],
+  typingMinutes: 0,
+  subjects: [],          // multiple subjects assigned (e.g., ['Math','Writing','Coding'])
+  activeSubject: null,   // current active subject
+  assignedQuest: null,
+  weeklyGoals: [         // teacher-approved weekly goals
+    { id, title, subject, dueISO, status: 'assigned'|'submitted'|'approved'|'rejected' }
+  ]
+}
+*/
 
 function saveAllUsers() {
   localStorage.setItem("allUsers", JSON.stringify(allUsers));
 }
 
+/* --------------- Entry / Home (no search bar here) --------------- */
 function showHomePage() {
   document.body.innerHTML = `
     <h2>Welcome to Typing Quest</h2>
-    <button onclick="showLoginForm()">Log In</button>
-    <button onclick="showCreateForm()">Create Account</button>
+    <div class="row">
+      <button onclick="showLoginForm()">Log In</button>
+      <button onclick="showCreateForm()">Create Account</button>
+    </div>
   `;
   showClock();
-  showSearchBar();
-  resetActivityTimer();
+  setupActivityGuard();
 }
 
+/* --------------- Auth (no search bar here) --------------- */
 function showLoginForm() {
   document.body.innerHTML = `
     <h2>Log In</h2>
-    <input id="loginName" placeholder="Enter username" />
-    <button onclick="login()">Log In</button>
+    <div class="section center">
+      <input id="loginName" placeholder="Enter username" />
+      <div class="row">
+        <button onclick="login()">Log In</button>
+        <button onclick="showHomePage()">Back</button>
+      </div>
+    </div>
   `;
+  showClock();
+  setupActivityGuard();
 }
 
 function showCreateForm() {
   document.body.innerHTML = `
     <h2>Create Account</h2>
-    <input id="newName" placeholder="Enter new username" />
-    <select id="newRole">
-      <option value="Student">Student</option>
-      <option value="Teacher">Teacher</option>
-    </select>
-    <button onclick="createAccount()">Create</button>
+    <div class="section center">
+      <input id="newName" placeholder="Enter new username" />
+      <select id="newRole">
+        <option value="Student">Student</option>
+        <option value="Teacher">Teacher</option>
+      </select>
+      <div class="row">
+        <button onclick="createAccount()">Create</button>
+        <button onclick="showHomePage()">Back</button>
+      </div>
+    </div>
   `;
+  showClock();
+  setupActivityGuard();
 }
 
 function createAccount() {
   const name = document.getElementById("newName").value.trim();
   const role = document.getElementById("newRole").value;
   if (!name || allUsers[name]) return alert("Invalid or taken username.");
-allUsers[name] = {
-  username: name,
-  role,
-  badges: [],
-  typingMinutes: 0,
-  assignedQuest: null,
-  subjects: [], // ← now supports multiple subjects
-  activeSubject: null
-};
-
+  allUsers[name] = {
+    username: name,
+    role,
+    badges: [],
+    typingMinutes: 0,
+    subjects: [],          // multiple subjects supported
+    activeSubject: null,
+    assignedQuest: null,
+    weeklyGoals: []        // weekly goals container
+  };
   saveAllUsers();
   showHomePage();
 }
@@ -62,260 +95,449 @@ function login() {
   if (!allUsers[name]) return alert("User not found.");
   currentUser = name;
   currentRole = allUsers[name].role;
-  subjectPath = allUsers[name].subject;
   loadDashboard();
 }
 
 function logout() {
   currentUser = null;
   currentRole = null;
-  subjectPath = null;
   showHomePage();
 }
 
+/* --------------- App Frame (search bar only after login) --------------- */
 function loadDashboard() {
   document.body.innerHTML = "";
-  showClock();
+  // Only show search after login
   showSearchBar();
-  resetActivityTimer();
+  showClock();
+  setupActivityGuard();
 
   if (currentRole === "Student") {
-    if (!subjectPath) {
-      chooseSubjectPath();
-    } else {
-      loadStudentDashboard();
-    }
+    // Show weekly goals screen first (Mathspace vibe)
+    showWeeklyGoalsScreen();
   } else {
     loadTeacherDashboard();
   }
 }
 
-function chooseSubjectPath() {
-  addHeader("Choose Your Subject Path");
-  ["Math", "Writing", "Coding"].forEach(subject => {
-    addButton(subject, () => {
-      subjectPath = subject;
-      allUsers[currentUser].subject = subject;
-      saveAllUsers();
-      loadStudentDashboard();
-    });
+/* --------------- Student: Weekly Goals + Dashboard --------------- */
+function showWeeklyGoalsScreen() {
+  const user = allUsers[currentUser];
+  document.body.innerHTML = `
+    <h2>Your Weekly Goals</h2>
+    <div id="goalsWrap" class="section"></div>
+    <div class="row">
+      <button onclick="loadStudentDashboard()">Go to Dashboard</button>
+    </div>
+  `;
+  showSearchBar();
+  showClock();
+  setupActivityGuard();
+
+  renderStudentGoalsList(user);
+}
+
+function renderStudentGoalsList(user) {
+  const wrap = document.getElementById("goalsWrap");
+  const goals = user.weeklyGoals || [];
+  if (goals.length === 0) {
+    wrap.innerHTML = `<p class="small center">No weekly goals yet. Check back soon.</p>`;
+    return;
+  }
+  const container = document.createElement("div");
+  container.className = "goal-list";
+
+  goals.forEach(g => {
+    const div = document.createElement("div");
+    div.className = "goal";
+    const dueTxt = g.dueISO ? new Date(g.dueISO).toLocaleDateString() : "No due date";
+    div.innerHTML = `
+      <h4>${g.title}</h4>
+      <div class="meta">Subject: ${g.subject} • Due: ${dueTxt} • Status: ${prettyStatus(g.status)}</div>
+      <div class="actions"></div>
+    `;
+    const actions = div.querySelector(".actions");
+
+    if (g.status === "assigned" || g.status === "rejected") {
+      const submitBtn = document.createElement("button");
+      submitBtn.textContent = "Submit for Approval";
+      submitBtn.onclick = () => {
+        g.status = "submitted";
+        saveAllUsers();
+        showWeeklyGoalsScreen();
+      };
+      actions.appendChild(submitBtn);
+    } else if (g.status === "submitted") {
+      const note = document.createElement("span");
+      note.className = "small";
+      note.textContent = "Waiting for teacher approval…";
+      actions.appendChild(note);
+    } else if (g.status === "approved") {
+      const ok = document.createElement("span");
+      ok.className = "small";
+      ok.textContent = "Approved ✅";
+      actions.appendChild(ok);
+    }
+
+    container.appendChild(div);
   });
+
+  wrap.innerHTML = "";
+  wrap.appendChild(container);
 }
 
 function loadStudentDashboard() {
   const data = allUsers[currentUser];
-  addHeader(`Welcome, ${data.username}`);
-  addText(`Active Subject: ${data.activeSubject}`);
-  if (data.assignedQuest) addText(`Assigned Quest: ${data.assignedQuest}`);
+  document.body.innerHTML = `
+    <h2>Welcome, ${data.username}</h2>
+    <div class="section center" id="subjectSwitch"></div>
+    <div class="section center" id="actions"></div>
+    <div class="section center" id="badges"></div>
+    <div class="row">
+      <button onclick="showWeeklyGoalsScreen()">Weekly Goals</button>
+      <button onclick="downloadTxt(allUsers[currentUser])">Download Progress</button>
+      <button onclick="logout()">Logout</button>
+    </div>
+  `;
+  showSearchBar();
+  showClock();
+  setupActivityGuard();
 
-  // Subject switcher
-  if (data.subjects.length > 1) {
-    addText("Switch Subject:");
+  // Subject switcher (multiple subjects; student can switch active)
+  const ss = document.getElementById("subjectSwitch");
+  if (!data.subjects || data.subjects.length === 0) {
+    ss.innerHTML = `<p class="small">No subjects assigned yet.</p>`;
+  } else {
+    ss.innerHTML = `<p>Active Subject: <strong>${data.activeSubject || "None"}</strong></p>`;
+    const row = document.createElement("div"); row.className = "row";
     data.subjects.forEach(sub => {
-      addButton(sub, () => {
+      const b = document.createElement("button");
+      b.textContent = sub;
+      b.onclick = () => {
         data.activeSubject = sub;
         saveAllUsers();
         loadStudentDashboard();
-      });
+      };
+      row.appendChild(b);
     });
+    ss.appendChild(row);
   }
 
-  // Quests based on active subject
-  const subject = data.activeSubject;
-  if (subject === "Math") {
-    addButton("Daily Challenge", launchDailyChallenge);
-    addButton("Typing Quest", launchTypingQuest);
-  } else if (subject === "Writing") {
-    addButton("Story Builder", launchStoryBuilder);
-    addButton("Grammar Game", launchGrammarGame);
-  } else if (subject === "Coding") {
-    addButton("Typing Quest", launchTypingQuest);
-    addButton("Daily Challenge", launchDailyChallenge);
+  // Actions based on active subject
+  const act = document.getElementById("actions");
+  const s = data.activeSubject;
+  if (!s) {
+    act.innerHTML = `<p class="small">Pick a subject to see activities.</p>`;
+  } else if (s === "Math") {
+    addActionButton(act, "Daily Challenge", launchDailyChallenge);
+    addActionButton(act, "Typing Quest", launchTypingQuest);
+  } else if (s === "Writing") { // Correct spelling
+    addActionButton(act, "Story Builder", launchStoryBuilder);
+    addActionButton(act, "Grammar Game", launchGrammarGame);
+  } else if (s === "Coding") {
+    addActionButton(act, "Typing Quest", launchTypingQuest);
+    addActionButton(act, "Daily Challenge", launchDailyChallenge);
   }
 
-  showBadges(data);
-  addButton("Download Progress", () => downloadTxt(data));
-  addButton("Logout", logout);
+  // Badges
+  const bd = document.getElementById("badges");
+  const badges = data.badges?.length ? data.badges.join(", ") : "None yet";
+  bd.innerHTML = `<div class="badge-strip">🏅 Badges: ${badges}</div>`;
 }
 
+function addActionButton(container, label, fn) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.onclick = fn;
+  container.appendChild(b);
+}
 
+/* --------------- Teacher --------------- */
 function loadTeacherDashboard() {
-  addHeader(`Hello Teacher ${currentUser}`);
-  addButton("View Students", showAllStudents);
-  addButton("Assign Quest", assignQuestToStudent);
-  addButton("Logout", logout);
+  document.body.innerHTML = `
+    <h2>Hello Teacher ${currentUser}</h2>
+    <div class="section center">
+      <div class="row">
+        <button onclick="showAllStudents()">View Students</button>
+        <button onclick="teacherAssignSubjects()">Assign Subjects</button>
+        <button onclick="teacherSetWeeklyGoals()">Set Weekly Goals</button>
+        <button onclick="teacherReviewGoals()">Review Submissions</button>
+      </div>
+    </div>
+    <div class="row">
+      <button onclick="downloadAll()">Download All (JSON)</button>
+      <button onclick="logout()">Logout</button>
+    </div>
+  `;
+  showSearchBar();
+  showClock();
+  setupActivityGuard();
 }
 
-// === Quests ===
-function launchDailyChallenge() {
-  document.body.innerHTML = '<h2>Daily Challenge</h2>';
-  const question = {
-    text: "What is 7 × 8?",
-    options: ["54", "56", "64", "58"],
-    answer: "56"
+function showAllStudents() {
+  document.body.innerHTML = `
+    <h2>Student Roster</h2>
+    <div class="section" id="roster"></div>
+    <div class="row"><button onclick="loadTeacherDashboard()">Back</button></div>
+  `;
+  showSearchBar();
+  showClock();
+  setupActivityGuard();
+
+  const roster = document.getElementById("roster");
+  Object.values(allUsers).forEach(u => {
+    if (u.role !== "Student") return;
+    const d = document.createElement("div");
+    d.className = "goal";
+    const badges = u.badges?.length ? u.badges.join(", ") : "None";
+    d.innerHTML = `
+      <h4>${u.username}</h4>
+      <div class="meta">Subjects: ${u.subjects?.join(", ") || "None"} • Active: ${u.activeSubject || "None"} • Typing: ${u.typingMinutes} mins</div>
+      <div class="small">Badges: ${badges}</div>
+    `;
+    roster.appendChild(d);
+  });
+}
+
+/* Assign multiple subjects (comma-separated) to a student */
+function teacherAssignSubjects() {
+  const student = prompt("Enter student username:");
+  if (!student || !allUsers[student]) return alert("Student not found.");
+  if (allUsers[student].role !== "Student") return alert("That user is not a student.");
+  const subjects = prompt("Assign subjects (comma-separated): Math, Writing, Coding");
+  if (!subjects) return alert("No subjects entered.");
+  const list = subjects.split(",").map(s => s.trim()).filter(Boolean);
+  allUsers[student].subjects = Array.from(new Set(list)); // unique
+  allUsers[student].activeSubject = allUsers[student].subjects[0] || null;
+  saveAllUsers();
+  alert(`Assigned subjects to ${student}: ${allUsers[student].subjects.join(", ")}`);
+}
+
+/* Create weekly goals for a student */
+function teacherSetWeeklyGoals() {
+  const student = prompt("Enter student username:");
+  if (!student || !allUsers[student]) return alert("Student not found.");
+  if (allUsers[student].role !== "Student") return alert("That user is not a student.");
+  const title = prompt("Goal title (e.g., Complete 3 Math tasks):");
+  if (!title) return alert("No title entered.");
+  const subject = prompt("Subject for this goal (Math, Writing, Coding):");
+  if (!subject) return alert("No subject entered.");
+  const due = prompt("Due date (YYYY-MM-DD), leave blank for end of week:");
+  const dueISO = due ? new Date(due).toISOString() : endOfWeekISO();
+
+  const goal = {
+    id: `${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+    title,
+    subject,
+    dueISO,
+    status: "assigned"
   };
-  addText(question.text);
-  question.options.forEach(opt => {
-    addButton(opt, () => {
-      if (opt === question.answer) addBadge("Math Master");
-      loadDashboard();
+  allUsers[student].weeklyGoals = allUsers[student].weeklyGoals || [];
+  allUsers[student].weeklyGoals.push(goal);
+  saveAllUsers();
+  alert(`Goal created for ${student}.`);
+}
+
+/* Approve/reject submitted goals */
+function teacherReviewGoals() {
+  document.body.innerHTML = `
+    <h2>Goal Submissions</h2>
+    <div class="section" id="subList"></div>
+    <div class="row"><button onclick="loadTeacherDashboard()">Back</button></div>
+  `;
+  showSearchBar();
+  showClock();
+  setupActivityGuard();
+
+  const subList = document.getElementById("subList");
+  let any = false;
+  Object.values(allUsers).forEach(u => {
+    if (u.role !== "Student") return;
+    (u.weeklyGoals || []).forEach(g => {
+      if (g.status === "submitted") {
+        any = true;
+        const card = document.createElement("div");
+        card.className = "goal";
+        card.innerHTML = `
+          <h4>${u.username}: ${g.title}</h4>
+          <div class="meta">Subject: ${g.subject} • Due: ${g.dueISO ? new Date(g.dueISO).toLocaleDateString() : "No due date"}</div>
+          <div class="actions"></div>
+        `;
+        const actions = card.querySelector(".actions");
+        const approve = document.createElement("button");
+        approve.textContent = "Approve";
+        approve.onclick = () => {
+          g.status = "approved";
+          addBadgeFor(u.username, "Goal Getter");
+          saveAllUsers();
+          teacherReviewGoals();
+        };
+        const reject = document.createElement("button");
+        reject.textContent = "Reject";
+        reject.onclick = () => {
+          g.status = "rejected";
+          saveAllUsers();
+          teacherReviewGoals();
+        };
+        actions.appendChild(approve);
+        actions.appendChild(reject);
+        subList.appendChild(card);
+      }
     });
+  });
+  if (!any) subList.innerHTML = `<p class="small center">No submissions waiting.</p>`;
+}
+
+/* --------------- Challenges --------------- */
+function launchDailyChallenge() {
+  document.body.innerHTML = `
+    <h2>Daily Challenge</h2>
+    <div class="section center" id="quiz"></div>
+    <div class="row"><button onclick="loadStudentDashboard()">Back</button></div>
+  `;
+  showSearchBar();
+  showClock();
+  setupActivityGuard();
+
+  const q = { text: "What is 7 × 8?", options: ["54","56","64","58"], answer: "56" };
+  const el = document.getElementById("quiz");
+  const p = document.createElement("p"); p.textContent = q.text; el.appendChild(p);
+  const row = document.createElement("div"); row.className = "row"; el.appendChild(row);
+  q.options.forEach(opt => {
+    const b = document.createElement("button");
+    b.textContent = opt;
+    b.onclick = () => {
+      if (opt === q.answer) addBadge("Math Master");
+      loadStudentDashboard();
+    };
+    row.appendChild(b);
   });
 }
 
 function launchStoryBuilder() {
-  document.body.innerHTML = '<h2>Story Builder</h2>';
+  document.body.innerHTML = `
+    <h2>Story Builder</h2>
+    <div class="section center" id="sb"></div>
+    <div class="row"><button onclick="loadStudentDashboard()">Back</button></div>
+  `;
+  showSearchBar();
+  showClock();
+  setupActivityGuard();
+
   const parts = ["The shark", "wears a tuxedo", "and teaches JavaScript"];
   let sentence = "";
-  const output = document.createElement("p");
-  output.innerText = "Build your story:";
-  document.body.appendChild(output);
+  const root = document.getElementById("sb");
+  const display = document.createElement("p");
+  display.textContent = "Build your story:";
+  root.appendChild(display);
 
+  const row = document.createElement("div"); row.className = "row"; root.appendChild(row);
   parts.forEach(piece => {
-    const btn = document.createElement("button");
-    btn.innerText = piece;
-    btn.onclick = () => {
+    const b = document.createElement("button");
+    b.textContent = piece;
+    b.onclick = () => {
       sentence += piece + " ";
-      output.innerText = "Build your story: " + sentence;
+      display.textContent = "Build your story: " + sentence;
     };
-    document.body.appendChild(btn);
+    row.appendChild(b);
   });
 
-  addButton("Finish", () => {
-    addBadge("Creative Fin");
-    loadDashboard();
-  });
+  const finish = document.createElement("button");
+  finish.textContent = "Finish";
+  finish.onclick = () => { addBadge("Creative Fin"); loadStudentDashboard(); };
+  root.appendChild(finish);
 }
 
 function launchGrammarGame() {
-  document.body.innerHTML = '<h2>Grammar Game</h2>';
-  const badSentence = "he swim fast yesterday";
+  document.body.innerHTML = `
+    <h2>Grammar Game</h2>
+    <div class="section center" id="gg"></div>
+    <div class="row"><button onclick="loadStudentDashboard()">Back</button></div>
+  `;
+  showSearchBar();
+  showClock();
+  setupActivityGuard();
+
+  const bad = "he swim fast yesterday";
   const fix = "He swam fast yesterday.";
 
-  addText(`Fix this sentence: "${badSentence}"`);
-  const input = document.createElement("input");
-  input.placeholder = "Type your fix here";
-  document.body.appendChild(input);
-
-  addButton("Submit", () => {
-    if (input.value.trim() === fix) {
-      addBadge("Grammar Shark");
-    } else alert("Not quite! Try again.");
-    loadDashboard();
-  });
+  const root = document.getElementById("gg");
+  const p = document.createElement("p"); p.textContent = `Fix this sentence: "${bad}"`; root.appendChild(p);
+  const input = document.createElement("input"); input.placeholder = "Type your fix here"; root.appendChild(input);
+  const submit = document.createElement("button"); submit.textContent = "Submit";
+  submit.onclick = () => {
+    if (input.value.trim() === fix) addBadge("Grammar Shark");
+    else alert("Not quite! Try again.");
+    loadStudentDashboard();
+  };
+  root.appendChild(submit);
 }
 
 function launchTypingQuest() {
-  document.body.innerHTML = '<h2>Typing Quest</h2>';
+  document.body.innerHTML = `
+    <h2>Typing Quest</h2>
+    <div class="section center" id="tq"></div>
+    <div class="row"><button onclick="loadStudentDashboard()">Back</button></div>
+  `;
+  showSearchBar();
+  showClock();
+  setupActivityGuard();
+
   const passage = "The shark swims silently below the waves";
-  const display = document.createElement("p");
-  display.innerText = `Type: "${passage}"`;
-  document.body.appendChild(display);
-
-  const input = document.createElement("input");
-  input.placeholder = "Start typing...";
-    document.body.appendChild(input);
-
-  const result = document.createElement("p");
-  document.body.appendChild(result);
+  const root = document.getElementById("tq");
+  const guide = document.createElement("p"); guide.textContent = `Type: "${passage}"`; root.appendChild(guide);
+  const input = document.createElement("input"); input.placeholder = "Start typing..."; root.appendChild(input);
+  const result = document.createElement("p"); root.appendChild(result);
 
   let startTime = null;
-
   input.addEventListener("input", () => {
     if (!startTime) startTime = Date.now();
     const typed = input.value;
     input.style.backgroundColor = passage.startsWith(typed) ? "#d4fcd4" : "#fcd4d4";
-
     if (typed === passage) {
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      result.innerText = `Finished in ${duration}s`;
+      result.textContent = `Finished in ${duration}s`;
       addBadge("Typing Shark");
       allUsers[currentUser].typingMinutes += Math.floor(duration / 60);
       saveAllUsers();
-      setTimeout(loadDashboard, 2000);
+      setTimeout(loadStudentDashboard, 1200);
     }
   });
 }
 
-// === Teacher Tools ===
-function showAllStudents() {
-  document.body.innerHTML = '<h2>Student Roster</h2>';
-  Object.values(allUsers).forEach(u => {
-    if (u.role === "Student") {
-      const d = document.createElement("div");
-      d.innerHTML = `<strong>${u.username}</strong><br>Subject: ${u.subject || "None"}<br>Badges: ${u.badges.join(", ") || "None"}<br>Typing Time: ${u.typingMinutes} mins`;
-      document.body.appendChild(d);
-    }
-  });
-  addButton("Back", loadDashboard);
-}
-
-function assignQuestToStudent() {
-  const studentName = prompt("Enter the student's username:");
-  if (!studentName || !allUsers[studentName]) return alert("Student not found.");
-  if (allUsers[studentName].role !== "Student") return alert("That user is not a student.");
-
-  const subjects = prompt("Assign subjects (comma-separated): Math, Writing, Coding");
-  if (!subjects) return alert("No subjects entered.");
-
-  const subjectList = subjects.split(",").map(s => s.trim());
-  allUsers[studentName].subjects = subjectList;
-  allUsers[studentName].activeSubject = subjectList[0]; // default to first
-  saveAllUsers();
-
-  const quest = prompt(`Assign a quest to ${studentName}:`);
-  if (quest) {
-    allUsers[studentName].assignedQuest = quest;
-    saveAllUsers();
-    alert(`Assigned subjects and quest to ${studentName}.`);
-  }
-
-  loadDashboard();
-}
-
-
-// === Utilities ===
-function addHeader(text) {
-  const h = document.createElement("h2");
-  h.innerText = text;
-  document.body.appendChild(h);
-}
-
-function addText(text) {
-  const p = document.createElement("p");
-  p.innerText = text;
-  document.body.appendChild(p);
-}
-
-function addButton(label, onClick) {
-  const btn = document.createElement("button");
-  btn.innerText = label;
-  btn.onclick = onClick;
-  document.body.appendChild(btn);
-}
-
-function addBadge(badgeName) {
+/* --------------- Badges / Downloads --------------- */
+function addBadge(name) {
   const user = allUsers[currentUser];
-  if (!user.badges.includes(badgeName)) {
-    user.badges.push(badgeName);
+  if (!user.badges.includes(name)) {
+    user.badges.push(name);
     saveAllUsers();
-    alert(`🏅 You earned the "${badgeName}" badge!`);
+    alert(`🏅 You earned the "${name}" badge!`);
   }
 }
 
-function showBadges(user) {
-  addText(`Badges: ${user.badges.join(", ") || "None yet"}`);
+function addBadgeFor(username, name) {
+  const user = allUsers[username];
+  if (!user.badges.includes(name)) {
+    user.badges.push(name);
+    saveAllUsers();
+  }
 }
 
 function downloadTxt(user) {
+  const goals = (user.weeklyGoals || []).map(g =>
+    `- [${g.status}] ${g.title} (${g.subject}) Due: ${g.dueISO ? new Date(g.dueISO).toLocaleDateString() : "N/A"}`
+  ).join("\n") || "None";
   const content = `
 Username: ${user.username}
 Role: ${user.role}
-Subjects: ${user.subjects.join(", ") || "None"}
+Subjects: ${user.subjects?.join(", ") || "None"}
 Active Subject: ${user.activeSubject || "None"}
 Typing Time: ${user.typingMinutes} minutes
-Badges: ${user.badges.join(", ") || "None"}
+Badges: ${user.badges?.join(", ") || "None"}
 Assigned Quest: ${user.assignedQuest || "None"}
+
+Weekly Goals:
+${goals}
   `.trim();
 
   const blob = new Blob([content], { type: "text/plain" });
@@ -325,48 +547,99 @@ Assigned Quest: ${user.assignedQuest || "None"}
   link.click();
 }
 
+function downloadAll() {
+  const blob = new Blob([JSON.stringify(allUsers, null, 2)], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `sharkbite_all_users.json`;
+  link.click();
+}
 
-// === Clock + AFK Timer ===
+/* --------------- Search (never on login/home) --------------- */
+function showSearchBar() {
+  // Guard: if not logged in, don't render
+  if (!currentUser) return;
+
+  // Avoid duplicates on re-render
+  const existing = document.getElementById("searchBarContainer");
+  if (existing) existing.remove();
+
+  const bar = document.createElement("div");
+  bar.id = "searchBarContainer";
+
+  const input = document.createElement("input");
+  input.placeholder = "Search Google...";
+
+  const btn = document.createElement("button");
+  btn.textContent = "🔍 Search";
+  btn.onclick = () => {
+    const q = input.value.trim();
+    if (q) window.open(`https://www.google.com/search?q=${encodeURIComponent(q)}`, "_blank");
+  };
+
+  bar.appendChild(input);
+  bar.appendChild(btn);
+  document.body.prepend(bar);
+}
+
+/* --------------- Clock + AFK --------------- */
 function showClock() {
-  const clock = document.createElement("div");
-  clock.id = "clock";
-  document.body.appendChild(clock);
+  if (!document.getElementById("clock")) {
+    const clock = document.createElement("div");
+    clock.id = "clock";
+    document.body.appendChild(clock);
+  }
+  // Update
+  const update = () => {
+    const el = document.getElementById("clock");
+    if (!el) return;
+    el.textContent = new Date().toLocaleTimeString();
+  };
+  update();
+  // One interval per page render
+  if (window._clockInterval) clearInterval(window._clockInterval);
+  window._clockInterval = setInterval(update, 1000);
+}
 
-  setInterval(() => {
-    const now = new Date();
-    clock.innerText = now.toLocaleTimeString();
-  }, 1000);
+function setupActivityGuard() {
+  resetActivityTimer();
+  document.onmousemove = resetActivityTimer;
+  document.onkeydown = resetActivityTimer;
 }
 
 function resetActivityTimer() {
   clearTimeout(activityTimer);
+  // Ask if still there at 5 minutes; auto-logout at 6 minutes if no interaction
   activityTimer = setTimeout(() => {
-    alert("⏳ Are you still there?");
-  }, 5 * 60 * 1000); // 5 minutes
-  document.body.onmousemove = resetActivityTimer;
-  document.body.onkeydown = resetActivityTimer;
+    const still = confirm("Are you still there?");
+    if (!still) {
+      setTimeout(() => {
+        // If there was no interaction in the extra minute, log out
+        logout();
+      }, 60 * 1000);
+    } else {
+      resetActivityTimer();
+    }
+  }, 5 * 60 * 1000);
 }
 
-// === Google Search Bar ===
-function showSearchBar() {
-  const searchDiv = document.createElement("div");
-  searchDiv.id = "searchBarContainer";
-
-  const input = document.createElement("input");
-  input.placeholder = "Search Google...";
-  input.id = "searchInput";
-
-  const btn = document.createElement("button");
-  btn.innerText = "🔍 Search";
-  btn.onclick = () => {
-    const query = input.value.trim();
-    if (query) window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, "_blank");
-  };
-
-  searchDiv.appendChild(input);
-  searchDiv.appendChild(btn);
-  document.body.appendChild(searchDiv);
+/* --------------- Helpers --------------- */
+function prettyStatus(s) {
+  if (s === "assigned") return "Assigned";
+  if (s === "submitted") return "Submitted";
+  if (s === "approved") return "Approved";
+  if (s === "rejected") return "Rejected";
+  return s || "Assigned";
+}
+function endOfWeekISO() {
+  const now = new Date();
+  const day = now.getDay(); // 0 Sun - 6 Sat
+  const diff = 6 - day;     // days until Saturday (end of week)
+  const end = new Date(now);
+  end.setDate(now.getDate() + diff);
+  end.setHours(23,59,59,999);
+  return end.toISOString();
 }
 
-// === Start App ===
+/* --------------- Boot --------------- */
 showHomePage();
