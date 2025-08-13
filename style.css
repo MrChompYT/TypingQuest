@@ -1,0 +1,131 @@
+/* === SharkBite Sites — Sunday aesthetic with weekly goals polish === */
+
+:root{
+  --bg1:#001f3f;
+  --bg2:#003366;
+  --accent:#00ffff;
+  --gold:#ffcc00;
+  --gold-2:#ffdb4d;
+  --panel:#002244;
+  --ink:#111;
+  --soft:#f0f8ff;
+  --cyan:#00bcd4;
+  --cyan-2:#0097a7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 40px;
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(to bottom right, var(--bg1), var(--bg2));
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+}
+
+h2 {
+  color: var(--accent);
+  font-size: 32px;
+  margin: 0 0 24px;
+  text-align: center;
+}
+
+p { margin: 8px 0 12px; font-size: 17px; text-align: center; }
+
+button {
+  background: var(--gold);
+  color: #000;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  margin: 8px 6px 0;
+  transition: background .25s ease, transform .06s ease;
+  font-size: 16px;
+}
+button:hover { background: var(--gold-2); }
+button:active { transform: translateY(1px); }
+
+input, select {
+  width: 100%;
+  max-width: 320px;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  margin: 8px 0;
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.section {
+  width: 100%;
+  max-width: 720px;
+  background: rgba(0,0,0,0.08);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 12px 0;
+}
+
+.row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.badge-strip { margin-top: 12px; font-size: 15px; opacity: .9; }
+
+/* Clock (always visible after render) */
+#clock {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  background: #001f3f;
+  color: var(--accent);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: 'Courier New', Courier, monospace;
+  box-shadow: 0 0 10px rgba(0,255,255,.4);
+  z-index: 1000;
+}
+
+/* Search (never shown on login/home forms) */
+#searchBarContainer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 22px;
+  padding: 10px;
+  background: var(--panel);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 720px;
+}
+#searchBarContainer input {
+  flex: 1;
+  padding: 10px 12px;
+  background: #fff;
+  color: #222;
+  border-radius: 6px;
+}
+#searchBarContainer button {
+  background: var(--cyan);
+  color: #fff;
+}
+#searchBarContainer button:hover { background: var(--cyan-2); }
+
+/* Weekly goals */
+.goal-list { display: grid; gap: 12px; }
+.goal {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 10px;
+  padding: 12px;
+}
+.goal h4 { margin: 0 0 6px; color: #fff; }
+.goal .meta { font-size: 14px; opacity: .9; margin-bottom: 8px; }
+.goal .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* Small helpers */
+.small { font-size: 14px; opacity: .85; }
+.center { text-align: center; }
